@@ -54,18 +54,20 @@ Detect flag: `--reply` present → reply mode active (post to GitLab).
 
 MR metadata (includes `diff_refs` needed for posting later):
 ```
-!`MR_REF="$(printf '%s\n' "$ARGUMENTS" | awk '{ for (i = 1; i <= NF; i++) if ($i != "--reply") out = (out ? out OFS : "") $i } END { print out }')" && glab api "merge_requests/$MR_REF" 2>/dev/null || glab mr view "$MR_REF" -F json`
+!`MR_REF="$(printf '%s\n' "$ARGUMENTS" | awk '{ for (i = 1; i <= NF; i++) if ($i != "--reply") out = (out ? out OFS : "") $i } END { print out }')"; if ! command -v glab >/dev/null 2>&1; then echo "glab CLI not installed — install: https://gitlab.com/gitlab-org/cli#installation"; elif ! glab auth status >/dev/null 2>&1; then echo "glab not authenticated — run: glab auth login"; else glab api "merge_requests/$MR_REF" 2>/dev/null || glab mr view "$MR_REF" -F json; fi`
 ```
 
 MR diff (raw, for correctness/security/anti-slop analysis and later for line-position parsing):
 ```
-!`MR_REF="$(printf '%s\n' "$ARGUMENTS" | awk '{ for (i = 1; i <= NF; i++) if ($i != "--reply") out = (out ? out OFS : "") $i } END { print out }')" && glab mr diff "$MR_REF" --raw`
+!`MR_REF="$(printf '%s\n' "$ARGUMENTS" | awk '{ for (i = 1; i <= NF; i++) if ($i != "--reply") out = (out ? out OFS : "") $i } END { print out }')"; if ! command -v glab >/dev/null 2>&1; then echo "glab CLI not installed — install: https://gitlab.com/gitlab-org/cli#installation"; elif ! glab auth status >/dev/null 2>&1; then echo "glab not authenticated — run: glab auth login"; else glab mr diff "$MR_REF" --raw; fi`
 ```
 
 Pipeline/CI status:
 ```
-!`glab ci status 2>/dev/null || echo "No pipeline found"`
+!`if ! command -v glab >/dev/null 2>&1; then echo "glab CLI not installed — install: https://gitlab.com/gitlab-org/cli#installation"; elif ! glab auth status >/dev/null 2>&1; then echo "glab not authenticated — run: glab auth login"; else glab ci status 2>/dev/null || echo "No pipeline found"; fi`
 ```
+
+If either metadata or diff block above prints a "glab CLI not installed"/"glab not authenticated" message instead of JSON/diff content, stop here and report that to the user — the review cannot proceed without MR data. Do not fabricate findings from the MR title/description alone.
 
 ## Instructions
 
@@ -146,8 +148,8 @@ If `$ARGUMENTS` contains `--reply`, post the review to GitLab after the analysis
 
 ### 1. Pre-flight
 ```bash
-command -v glab >/dev/null 2>&1 || { echo "glab CLI not installed — printing review locally"; exit 0; }
-glab auth status >/dev/null 2>&1 || { echo "glab not authenticated — printing review locally"; exit 0; }
+command -v glab >/dev/null 2>&1 || { echo "glab CLI not installed — install: https://gitlab.com/gitlab-org/cli#installation — printing review locally"; exit 0; }
+glab auth status >/dev/null 2>&1 || { echo "glab not authenticated — run: glab auth login — printing review locally"; exit 0; }
 ```
 On failure, fall back to printing the review in chat and warn the user — never fail the whole skill.
 
