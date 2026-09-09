@@ -42,11 +42,13 @@ Review MR `$ARGUMENTS` in this repository.
 
 ## Argument parsing
 
-Derive `MR_REF` from `$ARGUMENTS` by stripping `--reply`:
+Derive `MR_REF` from `$ARGUMENTS`: pick the last `http(s)://` token if present, else the first bare/`!`-prefixed numeric IID token, ignoring `--reply` and any surrounding natural-language words (e.g. "review MR ... --reply"):
 
 ```
-!`MR_REF="$(printf '%s\n' "$ARGUMENTS" | awk '{ for (i = 1; i <= NF; i++) if ($i != "--reply") out = (out ? out OFS : "") $i } END { print out }')" && printf 'MR_REF=%s\n' "$MR_REF"`
+!`MR_REF="$(printf '%s\n' "$ARGUMENTS" | awk '{ ref=""; for (i = 1; i <= NF; i++) { tok=$i; if (tok == "--reply") continue; if (tok ~ /^https?:\/\//) { ref=tok } else if (ref == "" && tok ~ /^!?[0-9]+$/) { ref=tok } } print ref }')" && printf 'MR_REF=%s\n' "$MR_REF"`
 ```
+
+If `MR_REF` prints empty, stop and ask the user for a valid MR IID or URL — do not guess.
 
 Detect flag: `--reply` present → reply mode active (post to GitLab).
 
@@ -54,12 +56,12 @@ Detect flag: `--reply` present → reply mode active (post to GitLab).
 
 MR metadata (includes `diff_refs` needed for posting later):
 ```
-!`MR_REF="$(printf '%s\n' "$ARGUMENTS" | awk '{ for (i = 1; i <= NF; i++) if ($i != "--reply") out = (out ? out OFS : "") $i } END { print out }')"; if ! command -v glab >/dev/null 2>&1; then echo "glab CLI not installed — install: https://gitlab.com/gitlab-org/cli#installation"; elif ! glab auth status >/dev/null 2>&1; then echo "glab not authenticated — run: glab auth login"; else glab api "merge_requests/$MR_REF" 2>/dev/null || glab mr view "$MR_REF" -F json; fi`
+!`MR_REF="$(printf '%s\n' "$ARGUMENTS" | awk '{ ref=""; for (i = 1; i <= NF; i++) { tok=$i; if (tok == "--reply") continue; if (tok ~ /^https?:\/\//) { ref=tok } else if (ref == "" && tok ~ /^!?[0-9]+$/) { ref=tok } } print ref }')"; MR_HOST="$(printf '%s\n' "$MR_REF" | sed -nE 's#^https?://([^/]*)/.*#\1#p')"; if ! command -v glab >/dev/null 2>&1; then echo "glab CLI not installed — install: https://gitlab.com/gitlab-org/cli#installation"; elif [ -n "$MR_HOST" ] && ! glab auth status --hostname "$MR_HOST" >/dev/null 2>&1; then echo "glab not authenticated for $MR_HOST — run: glab auth login --hostname $MR_HOST"; elif [ -z "$MR_HOST" ] && ! glab auth status >/dev/null 2>&1; then echo "glab not authenticated — run: glab auth login"; else glab api "merge_requests/$MR_REF" 2>/dev/null || glab mr view "$MR_REF" -F json; fi`
 ```
 
 MR diff (raw, for correctness/security/anti-slop analysis and later for line-position parsing):
 ```
-!`MR_REF="$(printf '%s\n' "$ARGUMENTS" | awk '{ for (i = 1; i <= NF; i++) if ($i != "--reply") out = (out ? out OFS : "") $i } END { print out }')"; if ! command -v glab >/dev/null 2>&1; then echo "glab CLI not installed — install: https://gitlab.com/gitlab-org/cli#installation"; elif ! glab auth status >/dev/null 2>&1; then echo "glab not authenticated — run: glab auth login"; else glab mr diff "$MR_REF" --raw; fi`
+!`MR_REF="$(printf '%s\n' "$ARGUMENTS" | awk '{ ref=""; for (i = 1; i <= NF; i++) { tok=$i; if (tok == "--reply") continue; if (tok ~ /^https?:\/\//) { ref=tok } else if (ref == "" && tok ~ /^!?[0-9]+$/) { ref=tok } } print ref }')"; MR_HOST="$(printf '%s\n' "$MR_REF" | sed -nE 's#^https?://([^/]*)/.*#\1#p')"; if ! command -v glab >/dev/null 2>&1; then echo "glab CLI not installed — install: https://gitlab.com/gitlab-org/cli#installation"; elif [ -n "$MR_HOST" ] && ! glab auth status --hostname "$MR_HOST" >/dev/null 2>&1; then echo "glab not authenticated for $MR_HOST — run: glab auth login --hostname $MR_HOST"; elif [ -z "$MR_HOST" ] && ! glab auth status >/dev/null 2>&1; then echo "glab not authenticated — run: glab auth login"; else glab mr diff "$MR_REF" --raw; fi`
 ```
 
 Pipeline/CI status:
