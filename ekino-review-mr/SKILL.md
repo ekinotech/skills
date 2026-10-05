@@ -4,7 +4,7 @@ description: "Review a GitLab merge request for correctness, security, breaking 
 user-invocable: true
 when_to_use: "Invoke to review a GitLab MR by IID/URL, optionally post the review back to GitLab with every finding pinned to its exact file+line."
 category: utilities
-keywords: [mr, merge request, review, gitlab, glab, jira, inline comment, discussion, position, anti-slop, ai-slop]
+keywords: [mr, merge request, review, gitlab, glab, jira, inline comment, discussion, position, label, anti-slop, ai-slop]
 argument-hint: "<MR IID or URL> [--reply]"
 allowed-tools:
   - Bash(command -v *)
@@ -28,7 +28,7 @@ allowed-tools:
   - Grep
 metadata:
   author: duc.nguyen
-  version: "1.4.0"
+  version: "1.5.0"
 ---
 
 # Review Merge Request
@@ -38,7 +38,7 @@ Review MR `$ARGUMENTS`. The MR may belong to the current repository or, when giv
 ## Modes
 
 - **Review-only** (default): review the MR and print findings to chat. Do not post anything to GitLab, edit, commit, or push. Exception: if no project standards doc exists and the MR's local clone is the current directory's repo, create a local `docs/code-standards.md` from a codebase scan, report the change, and do not push it.
-- **Reply** (`--reply`): after the review, post it back to the MR: one flat summary note, one line-anchored discussion per finding, and one discussion thread per unresolved question (line-anchored when it concerns specific code, unanchored otherwise). See "Posting the review" below. There is no `--fix` mode in v1; this skill only reviews and posts. It does not fix code.
+- **Reply** (`--reply`): after the review, post it back to the MR: one flat summary note, one line-anchored discussion per finding, and one discussion thread per unresolved question (line-anchored when it concerns specific code, unanchored otherwise). When at least one finding was posted, also add a red `Fixes todo` label to the MR (reusing a similar existing label). See "Posting the review" below. There is no `--fix` mode in v1; this skill only reviews and posts. It does not fix code.
 
 ## Argument parsing
 
@@ -220,13 +220,33 @@ Questions from step 5 above get one discussion each, so the author can answer in
 
 Do not fold questions into the summary note; it only states how many were posted. Record any posting failure like a finding failure.
 
-### 6. Verdict-dependent action
+### 6. Add the "Fixes todo" label
+Run this only when at least one finding discussion (any severity) posted in step 4. Questions alone do not count, since they ask for an answer, not a fix. Skip it when no finding posted.
+
+1. Look for an existing label with the same meaning. The list includes labels inherited from parent groups:
+   ```bash
+   glab api --hostname <HOST> "projects/<PROJECT_ID>/labels?search=fix&per_page=100"
+   ```
+   Compare names after lowercasing and removing spaces, `-`, `_`, and punctuation. Reuse a label whose normalized name is `fixestodo`, or a close variant of it such as `Fix todo`, `Fixes to do`, `fixes-todo`, `To-do fixes`, or `Fixes TODO`. Prefer an exact `fixestodo` match over a variant. Do not reuse a label with a different meaning, such as `fixed`, `hotfix`, or `bugfix`.
+2. No match → create it in red:
+   ```bash
+   glab api --hostname <HOST> --method POST "projects/<PROJECT_ID>/labels" -f name="Fixes todo" -f color="#FF0000"
+   ```
+   If it returns `409` (label already exists), use `Fixes todo` as is.
+3. Add the chosen label to the MR. `add_labels` keeps the MR's other labels, and adding a label the MR already has is a no-op:
+   ```bash
+   glab api --hostname <HOST> --method PUT "projects/<PROJECT_ID>/merge_requests/<IID>" -f add_labels="<label name>"
+   ```
+
+On any failure (for example `403` because the token cannot create labels), record it as a posting failure and continue. Never fail the skill over the label.
+
+### 7. Verdict-dependent action
 - **Approve**: `glab mr approve <MR_SEL>` after all findings (there should be none Critical/Important) are posted.
 - **Request changes**: do not approve. Leave the inline discussions unresolved. That is the blocking signal in GitLab. Do not call `glab mr approve`.
 - **Comment**: no approve/revoke action; inline discussions (Suggestions) and the summary note are enough.
 
-### 7. Idempotency
-v1 does not dedupe. Re-running `ekino-review-mr <MR_REF> --reply` posts a fresh summary note, finding discussions, and question threads each time.
+### 8. Idempotency
+v1 does not dedupe. Re-running `ekino-review-mr <MR_REF> --reply` posts a fresh summary note, finding discussions, and question threads each time. The `Fixes todo` label is not duplicated: it is added once and an existing label is reused.
 
 ## Final output
 
@@ -235,5 +255,5 @@ After the mode completes, report to chat:
 - Code context mode (local fetch / API fallback, and why if fallback) and whether target drift was found
 - Duplicate/prior implementation, project standards, strategic necessity results
 - JIRA keys found and whether they were fetched; if credentials were missing, the short setup instructions
-- If `--reply` ran: number of finding discussions and question threads posted, any posting failures (file/finding-or-question/error), whether the summary note posted or fell back to local print
+- If `--reply` ran: number of finding discussions and question threads posted, the label added (and whether it was reused, created, or skipped), any posting failures (file/finding-or-question/error), whether the summary note posted or fell back to local print
 - Unresolved questions, if any (with `--reply`: note they were posted to the MR)

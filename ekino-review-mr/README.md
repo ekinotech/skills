@@ -49,6 +49,7 @@ Post the review back to GitLab, one line-anchored discussion per finding, one th
 /ekino-review-mr 123 --reply
 ```
 
+- **`Fixes todo` label** → when at least one finding was posted, the MR gets a red `Fixes todo` label. A similar existing label (`Fix todo`, `Fixes to do`, `fixes-todo`, ...) is reused instead of creating a new one. Label errors (e.g. no permission to create labels) are reported but never stop the review.
 - **Approve** verdict → runs `glab mr approve` after all findings are posted.
 - **Request changes** → discussions are left open/unresolved (the blocking signal in GitLab); MR is not approved.
 - **Comment** → suggestions + summary note only, no approve/revoke action. Also used instead of Approve when an open question could change the verdict.
@@ -60,7 +61,7 @@ There is no `--fix` mode. This skill reviews and posts. It does not fix code.
 - Authenticate `glab` once per machine (`glab auth login`) before using `--reply`; the skill checks and fails safe (prints locally, warns) if auth is missing.
 - Let it generate `docs/code-standards.md` the first time you run it in a repo with no standards doc, then commit that file yourself. Future reviews will use it instead of generic conventions.
 - Treat Suggestion-level anti-slop findings as discussion starters, not blockers. The reference doc is tuned to avoid over-flagging (see "when NOT to flag").
-- `--reply` is not idempotent in v1: re-running it on the same MR posts a fresh summary note, discussions, and question threads each time. Don't re-run `--reply` on an MR you've already reviewed unless you want duplicate discussions.
+- `--reply` is not idempotent in v1: re-running it on the same MR posts a fresh summary note, discussions, and question threads each time (the `Fixes todo` label is not duplicated). Don't re-run `--reply` on an MR you've already reviewed unless you want duplicate discussions.
 - Review the "Mandatory gates" section of the output even on a clean diff. A technically correct MR can still fail the duplicate-work or strategic-necessity gate.
 
 ## Reference docs
