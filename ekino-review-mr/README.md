@@ -21,6 +21,13 @@ Reviewing MRs well requires more than reading a diff: catching duplicate work, c
 
 - [`glab`](https://gitlab.com/gitlab-org/cli) (GitLab CLI) installed and authenticated: `glab auth login`.
 - Run from within the git repository the MR belongs to (the skill uses `glab api`/`glab mr` against the current project).
+- Optional — JIRA ticket context. When the MR title, branch, or description contains a JIRA key, `scripts/fetch-jira-issue.sh` fetches the ticket (read-only, GET only) so the diff is checked against it. Credentials are read from env vars, then `<project>/.claude/.env`, `~/.claude/.env`, then `ekino-review-mr/.env`:
+  ```
+  JIRA_BASE_URL=https://your-company.atlassian.net
+  JIRA_EMAIL=you@company.com   # Cloud only; omit for Server/Data Center personal access token
+  JIRA_API_TOKEN=<token>
+  ```
+  Without credentials the review still runs; it reports the keys it found and how to configure access.
 
 ## How to use
 
@@ -57,6 +64,7 @@ There is no `--fix` mode — this skill reviews and posts, it does not remediate
 - `references/anti-ai-slop.md` — full slop taxonomy, phrasing guide, stack-specific appendix (Go, React/TS, Tailwind, SQL).
 - `references/gitlab-line-position-algorithm.md` — how diff hunks are parsed into GitLab's `position` object for the Discussions API.
 - `references/project-rules-example.md` — worked example of project-specific compliance checking.
+- `scripts/fetch-jira-issue.sh` — read-only JIRA issue fetcher (summary, type, status, description).
 
 ## License
 
