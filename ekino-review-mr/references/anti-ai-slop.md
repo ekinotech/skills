@@ -4,7 +4,7 @@ Concrete taxonomy of "AI slop" code patterns the reviewer should flag, with dete
 
 ## Why this matters
 
-LLM-assisted contributions often produce code that *compiles, passes tests, and looks reasonable per-file* — but pollutes the codebase at the aggregate. Common drivers:
+LLM-assisted contributions often produce code that *compiles, passes tests, and looks reasonable per-file*, but pollutes the codebase at the aggregate. Common drivers:
 
 - Low-quality LLMs that pattern-match without understanding constraints
 - Contributors who don't read their own diffs before pushing
@@ -15,7 +15,7 @@ The result is **code rác** (garbage code) and **code dư thừa** (redundant co
 
 ---
 
-## Section 1: Structural slop (high impact — flag as **Important**)
+## Section 1: Structural slop (high impact: flag as **Important**)
 
 One bad call here infects 100 files later. Always flag.
 
@@ -29,7 +29,7 @@ One bad call here infects 100 files later. Always flag.
 **Pattern**: New `formatDate()` / `slugify()` / `chunk()` / HTTP retry wrapper when the repo already has one.
 **Why bad**: Two implementations diverge over time. Bugs get fixed in one but not the other.
 **Detection**: Grep the repo for similar function names or behavior before approving any new utility.
-**Fix**: Use the existing one. If the existing one is inadequate, *extend* it — don't fork it.
+**Fix**: Use the existing one. If the existing one is inadequate, *extend* it. Don't fork it.
 
 ### 1.3 Premature abstraction
 **Pattern**: New interface + factory + builder + adapter for a feature with one implementation and two callers.
@@ -40,11 +40,11 @@ One bad call here infects 100 files later. Always flag.
 ### 1.4 Config flag for what should be a constant
 **Pattern**: New env var or config field `ENABLE_X`, `USE_NEW_Y`, `FEATURE_Z_ENABLED` for behavior that should be hardcoded.
 **Why bad**: Will never be turned off. Becomes documentation lag and a foot-gun. Doubles the test matrix.
-**Detection**: Any new config field — ask "would we actually flip this in production? If no, why is it a flag?"
+**Detection**: Any new config field: ask "would we actually flip this in production? If no, why is it a flag?"
 **Fix**: Pick the value, hardcode it. Delete the flag plumbing.
 
 ### 1.5 Schema/contract change without migration
-**Pattern**: PR adds a NOT NULL column, renames a field, changes a response shape — no migration, no backward-compat shim.
+**Pattern**: PR adds a NOT NULL column, renames a field, changes a response shape, with no migration, no backward-compat shim.
 **Why bad**: Breaks deployed clients or existing data.
 **Detection**: Diff touches DB schema, API DTOs, public types, or persisted config formats.
 **Fix**: Add migration, deprecation path, or version the contract.
@@ -56,14 +56,14 @@ One bad call here infects 100 files later. Always flag.
 **Fix**: Split before merge. Group related additions into a new focused module.
 
 ### 1.7 Phantom dependencies
-**Pattern**: `package.json` / `go.mod` / `requirements.txt` adds a dep — diff doesn't actually import it, OR imports it for one trivial call that the language stdlib already supports.
-**Why bad**: Supply chain risk, install size, transitive vulnerabilities — all for nothing.
+**Pattern**: `package.json` / `go.mod` / `requirements.txt` adds a dep, but the diff doesn't actually import it, OR imports it for one trivial call that the language stdlib already supports.
+**Why bad**: Supply chain risk, install size, transitive vulnerabilities, all for nothing.
 **Detection**: Cross-check dep additions against actual `import`/`require`/`use` lines in the diff.
 **Fix**: Remove the dep, inline the trivial call, or use stdlib.
 
 ---
 
-## Section 2: Micro slop (each instance small — flag as **Suggestion**)
+## Section 2: Micro slop (each instance small: flag as **Suggestion**)
 
 Don't block merges, but call out. Aggregate is rot.
 
@@ -98,10 +98,10 @@ Don't block merges, but call out. Aggregate is rot.
 
 ### 2.8 Phantom test coverage
 **Pattern**: Tests that exercise lines without meaningful assertions: `expect(result).toBeTruthy()` on a value that's always truthy; `assert result is not None` when the function can't return None.
-**Fix**: Assert on the actual behavior — value, side effect, error.
+**Fix**: Assert on the actual behavior: value, side effect, error.
 
 ### 2.9 Mock-of-a-mock
-**Pattern**: Tests where 80% of setup is mocking, and the assertions verify the mock got called — not that the SUT did the right thing.
+**Pattern**: Tests where 80% of setup is mocking, and the assertions verify the mock got called, not that the SUT did the right thing.
 **Fix**: Use real implementations where possible. Mock only at integration boundaries.
 
 ### 2.10 Unused symbols introduced
@@ -143,7 +143,7 @@ Look across the whole diff, not per-file.
 ### 3.5 Commit messages with LLM-style fluff
 **Signal**: Commits titled "Improve code quality and enhance maintainability", "Refactor for clarity", "Update various files".
 **What it means**: Author didn't read the diff before committing.
-**Action**: Informational. Mention it in the review — recommend conventional-commits format with the *actual* change described.
+**Action**: Informational. Mention it in the review and recommend conventional-commits format with the *actual* change described.
 
 ---
 
@@ -153,17 +153,19 @@ Slop findings are *judgment calls*. Bug findings are not. The reviewer LLM tends
 
 ### Good phrasing
 
-- **State the cost, not the rule.** "This abstraction has one caller and one implementation — the indirection adds 15 lines of test surface without enabling a second use case. Consider inlining until a second caller appears."
+Also follow the Writing style rules in `SKILL.md` (no dashes, no emoji, plain words).
+
+- **State the cost, not the rule.** "This abstraction has one caller and one implementation. It adds 15 lines to test and does not enable a second use case. Consider inlining it until a second caller appears."
 - **Tie to a concrete future risk.** "Naming the file `utils/helpers.ts` invites future additions. Within 6 months this file tends to grow to 1000+ lines. Suggest renaming to `<domain-specific-name>.ts`."
-- **Offer the alternative.** Don't just flag — say what good looks like.
+- **Offer the alternative.** Don't just flag it. Say what good looks like.
 - **Acknowledge it's a call.** "This is a Suggestion, not a blocker. If you have a use case in mind for the second implementation, leave it."
 
 ### Bad phrasing
 
-- "This is AI slop." — accusatory, unhelpful, often wrong.
-- "This violates DRY/YAGNI/SOLID." — principle-thumping. State the concrete cost instead.
-- "Please refactor." — vague. Refactor *how*?
-- "I don't like this." — preference dressed as review.
+- "This is AI slop." Accusatory, unhelpful, often wrong.
+- "This violates DRY/YAGNI/SOLID." Quotes a rule. State the concrete cost instead.
+- "Please refactor." Vague. Refactor *how*?
+- "I don't like this." Personal taste, not a review point.
 
 ---
 
@@ -171,7 +173,7 @@ Slop findings are *judgment calls*. Bug findings are not. The reviewer LLM tends
 
 The witch-hunt is the failure mode opposite to the slop. Calibrate:
 
-- **Humans also write defensive code.** A `null` check at a system boundary (API input, external response) is correct — don't flag it as paranoia.
+- **Humans also write defensive code.** A `null` check at a system boundary (API input, external response) is correct. Don't flag it as paranoia.
 - **One-line wrappers can earn their weight** when they name a domain concept. `function isWeekend(d) { return d.getDay() === 0 || d.getDay() === 6 }` is fine.
 - **Try/catch around legacy code with unknown failure modes** is a reasonable hedge while the code is being understood.
 - **Abstractions can be intentional** if the author knows the second implementation is coming in the next PR. Ask, don't assume.
@@ -190,39 +192,39 @@ Concrete examples from common stacks. Use these as templates for finding languag
 
 ### 6.1 Go
 
-- **Error wrapping**: `fmt.Errorf("doing X: %w", err)` — wrapping with `%w` preserves the chain. `fmt.Errorf("doing X: %v", err)` *loses* the chain. Flag the latter.
-- **`if err != nil { return err }`** is canonical Go — do **not** flag it as defensive paranoia.
-- **`interface{}` / `any` parameter** introduced where a concrete type would do — flag.
-- **`for rows.Next()` loop missing `rows.Err()` check** — `database/sql` requires it. Bug, not slop.
-- **goroutine launched without lifetime owner** (no `context`, no `wg`, no channel return) — leak risk.
-- **Mutex by value embedded in a struct that gets copied** — silent data race.
+- **Error wrapping**: `fmt.Errorf("doing X: %w", err)`: wrapping with `%w` preserves the chain. `fmt.Errorf("doing X: %v", err)` *loses* the chain. Flag the latter.
+- **`if err != nil { return err }`** is standard Go. Do **not** flag it as defensive paranoia.
+- **`interface{}` / `any` parameter** introduced where a concrete type would do: flag.
+- **`for rows.Next()` loop missing `rows.Err()` check**: `database/sql` requires it. Bug, not slop.
+- **goroutine launched without lifetime owner** (no `context`, no `wg`, no channel return): leak risk.
+- **Mutex by value embedded in a struct that gets copied**: silent data race.
 
 ### 6.2 React / TypeScript
 
-- **`useEffect` with empty deps doing data fetch** — usually wants `useEffect` + `AbortController`, or better, the data-fetch lib already in the project (React Query, SWR, tRPC).
+- **`useEffect` with empty deps doing data fetch**: usually wants `useEffect` + `AbortController`, or better, the data-fetch lib already in the project (React Query, SWR, tRPC).
 - **`useState` for derived state** that should be a memoized computation.
-- **Inline anonymous functions in props** are usually fine — don't flag them as performance issues unless profiling shows otherwise.
-- **`any` in component props** — flag. Components are the public contract of the UI layer.
-- **New context provider for state that two siblings share** — premature; lift state to the parent or use the project's state lib.
-- **Component file >200 lines** mixing data fetching, business logic, and rendering — split.
+- **Inline anonymous functions in props** are usually fine. Don't flag them as performance issues unless profiling shows otherwise.
+- **`any` in component props**: flag. Components are the public contract of the UI layer.
+- **New context provider for state that two siblings share**: premature; lift state to the parent or use the project's state lib.
+- **Component file >200 lines** mixing data fetching, business logic, and rendering: split.
 
 ### 6.3 Tailwind / CSS
 
-- **Arbitrary values everywhere** (`h-[473px]`, `text-[#3a5b71]`) — should use design tokens or the closest scale value.
-- **`!important` (`!h-screen`)** introduced to override — almost always wrong; find the source of the cascade conflict.
-- **`h-screen` on mobile-facing UI** — breaks on iOS Safari (chrome + virtual keyboard). Prefer `h-dvh` or `min-h-dvh`.
-- **Fixed `grid-cols-N` without mobile breakpoint** — should be `grid-cols-1 sm:grid-cols-2 lg:grid-cols-N`.
-- **`<input>` / `<textarea>` with `text-sm` only** — font-size <16px triggers iOS Safari auto-zoom on focus. Use `text-base md:text-sm`.
-- **Inline `style={{...}}` for things Tailwind covers** — should use a class.
+- **Arbitrary values everywhere** (`h-[473px]`, `text-[#3a5b71]`): should use design tokens or the closest scale value.
+- **`!important` (`!h-screen`)** introduced to override: almost always wrong; find the source of the cascade conflict.
+- **`h-screen` on mobile-facing UI**: breaks on iOS Safari (chrome + virtual keyboard). Prefer `h-dvh` or `min-h-dvh`.
+- **Fixed `grid-cols-N` without mobile breakpoint**: should be `grid-cols-1 sm:grid-cols-2 lg:grid-cols-N`.
+- **`<input>` / `<textarea>` with `text-sm` only**: font-size <16px triggers iOS Safari auto-zoom on focus. Use `text-base md:text-sm`.
+- **Inline `style={{...}}` for things Tailwind covers**: should use a class.
 
 ### 6.4 SQL / migrations
 
-- **String concatenation building SQL** with user input — injection. Always parameterize.
-- **`SELECT *` in production queries** — fragile to schema change, fetches unused columns.
-- **Migration that's not idempotent** — re-running it fails. Use `IF NOT EXISTS` / `IF EXISTS` where appropriate.
-- **NOT NULL column added without DEFAULT or backfill** — breaks deployed code reading old rows.
-- **Index added on a low-cardinality column** without justification — waste.
-- **`ORDER BY` / `WHERE` on a column with no index** in a query expected to be hot — performance landmine.
+- **String concatenation building SQL** with user input: injection. Always parameterize.
+- **`SELECT *` in production queries**: fragile to schema change, fetches unused columns.
+- **Migration that's not idempotent**: re-running it fails. Use `IF NOT EXISTS` / `IF EXISTS` where appropriate.
+- **NOT NULL column added without DEFAULT or backfill**: breaks deployed code reading old rows.
+- **Index added on a low-cardinality column** without justification: waste.
+- **`ORDER BY` / `WHERE` on a column with no index** in a query expected to be hot: performance trap.
 
 ---
 
