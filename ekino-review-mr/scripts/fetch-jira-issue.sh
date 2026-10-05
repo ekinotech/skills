@@ -96,9 +96,9 @@ for key in "$@"; do
         cat "$body_file"; echo
       fi
       ;;
-    401|403) echo "Access denied (HTTP $http_code) — check JIRA_EMAIL / JIRA_API_TOKEN and project permissions." ;;
-    404) echo "Not found (HTTP 404) — not a JIRA issue, or no access." ;;
-    000) echo "Request failed — could not reach $JIRA_BASE_URL." ;;
+    401|403) echo "Access denied (HTTP $http_code). Check JIRA_EMAIL / JIRA_API_TOKEN and project permissions." ;;
+    404) echo "Not found (HTTP 404). Not a JIRA issue, or no access." ;;
+    000) echo "Request failed. Could not reach $JIRA_BASE_URL." ;;
     *) echo "Unexpected HTTP $http_code." ;;
   esac
   rm -f "$body_file"

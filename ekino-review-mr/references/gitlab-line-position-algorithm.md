@@ -2,7 +2,7 @@
 
 How `ekino-review-mr` turns a finding (file + approximate location) into a
 GitLab Discussions API call that lands as a real inline comment on the exact
-diff line — never a flat top-level note.
+diff line, never a flat top-level note.
 
 ## Why this needs its own logic
 
@@ -14,17 +14,17 @@ object that GitLab validates strictly: wrong SHA or wrong line number → `400`.
 ## 1. Get `diff_refs`
 
 ```bash
-glab api "projects/:id/merge_requests/<iid>" | jq '.diff_refs'
+glab mr view <MR_SEL> -F json | jq '.diff_refs'
 # { "base_sha": "...", "head_sha": "...", "start_sha": "..." }
 ```
 
 Fetch this once per review run. If the MR is updated (new commits pushed)
-mid-review, re-fetch before posting — a stale `head_sha` is rejected.
+mid-review, re-fetch before posting, because a stale `head_sha` is rejected.
 
 ## 2. Get the raw diff and build a per-file line index
 
 ```bash
-glab mr diff <iid> --raw
+glab mr diff <MR_SEL> --raw
 ```
 
 Parse it as a standard unified diff. For each file's hunks:
@@ -41,17 +41,17 @@ Parse it as a standard unified diff. For each file's hunks:
     and `new_line`. Increment both.
 - Build a map: `file_path -> [{content, old_line, new_line}, ...]` covering
   every line touched or shown in the diff. This is the only set of lines
-  GitLab will accept a position for — you cannot comment on a line the diff
+  GitLab will accept a position for. You cannot comment on a line the diff
   doesn't show.
 
 Do this parse yourself (Read the raw diff text and walk it line by line).
-Do not guess line numbers from the final-file content — they must match the
+Do not guess line numbers from the final-file content. They must match the
 diff's own numbering exactly, or the API rejects the position.
 
 ## 3. Anchor every finding to one line in that index
 
 For a finding tied to a specific changed line, use that line directly
-(prefer `new_line` — comment against the new version of the file — unless
+(prefer `new_line`, which comments on the new version of the file, unless
 the finding is specifically about a removed line, in which case use
 `old_line` with no `new_line`).
 
@@ -69,7 +69,7 @@ comment body:
   there's no test file to anchor to).
 
 Never post a finding as a plain top-level note because it doesn't cleanly
-fit one line. Pick the closest defensible line — that's the contract.
+fit one line. Pick the closest fitting line. That is the rule.
 
 ## 4. Build the request body as a file, not inline flags
 
@@ -80,7 +80,7 @@ deterministic and avoids shell-quoting/nesting issues entirely:
 
 ```json
 {
-  "body": "**Important** — missing null check before dereference.\n\nExplain why it matters here.",
+  "body": "**Important:** missing null check before this value is used.\n\nSay why it matters here.",
   "position": {
     "position_type": "text",
     "base_sha": "<diff_refs.base_sha>",
@@ -99,7 +99,7 @@ For a finding on a removed line, use `"old_line": 42` instead of
 Post it:
 
 ```bash
-glab api --method POST "projects/:id/merge_requests/<iid>/discussions" \
+glab api --hostname <HOST> --method POST "projects/<PROJECT_ID>/merge_requests/<IID>/discussions" \
   --input /path/to/payload.json
 ```
 
@@ -107,19 +107,40 @@ glab api --method POST "projects/:id/merge_requests/<iid>/discussions" \
 
 If the POST returns `400`/`422` (line not part of the diff, stale SHA):
 
-1. Re-fetch `diff_refs` and re-parse the diff once — the MR may have moved.
+1. Re-fetch `diff_refs` and re-parse the diff once, since the MR may have moved.
 2. Retry the same finding against the recomputed position.
 3. If it still fails, do **not** fall back to a flat `glab mr note`. Record
    the finding as a posting failure in the final report (file, finding,
    error) so a human can act on it. Silent downgrade to a generic comment
    defeats the point of this skill.
 
-## 6. The one exception: the summary note
+## 6. Exception: the summary note
 
 The overview (summary, mandatory-gate results, risk level, verdict) has no
 single code line to anchor to and is posted once as a plain note via
-`glab mr note` — this is the only allowed non-inline post. Every item in the
-Findings section still gets its own inline discussion per the rules above.
+`glab mr note`. Every item in the Findings section still gets its own inline
+discussion per the rules above.
+
+## 7. Exception: general questions
+
+Unresolved questions are posted as threads so the author can answer and
+resolve them. A line-specific question follows sections 3-5 exactly (same
+`position`, same retry rule). A general question (no natural code line) is
+posted to the same endpoint without `position`, which creates a resolvable
+discussion thread on the MR overview (unlike `glab mr note`, which is a
+plain note):
+
+```json
+{ "body": "**Question:** Is this endpoint only for internal callers?\n\nThe answer decides whether the missing auth check is a blocker." }
+```
+
+```bash
+glab api --hostname <HOST> --method POST "projects/<PROJECT_ID>/merge_requests/<IID>/discussions" \
+  --input /path/to/question.json
+```
+
+Only use this for questions. A finding with no obvious line still follows
+section 3: pick the closest fitting line.
 
 ## Future extension (not in v1)
 
