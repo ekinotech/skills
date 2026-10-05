@@ -7,6 +7,10 @@ category: utilities
 keywords: [mr, merge request, review, gitlab, glab, inline comment, discussion, position, anti-slop, ai-slop]
 argument-hint: "<MR IID or URL> [--reply]"
 allowed-tools:
+  - Bash(command -v *)
+  - Bash(printf *)
+  - Bash(awk *)
+  - Bash(sed *)
   - Bash(glab mr view *)
   - Bash(glab mr diff *)
   - Bash(glab mr note *)
