@@ -27,10 +27,14 @@ fi
 
 # Read one KEY=VALUE from a dotenv file without sourcing it (no code execution).
 read_env_value() {
-  local name="$1" file="$2"
+  local name="$1" file="$2" v
   [ -f "$file" ] || return 1
-  sed -nE "s/^[[:space:]]*(export[[:space:]]+)?${name}[[:space:]]*=[[:space:]]*(.*)$/\2/p" "$file" \
-    | tail -n 1 | sed -E 's/[[:space:]]+$//; s/^"(.*)"$/\1/; s/^'\''(.*)'\''$/\1/'
+  v="$(sed -nE "s/^[[:space:]]*(export[[:space:]]+)?${name}[[:space:]]*=[[:space:]]*(.*)$/\2/p" "$file" | tail -n 1)"
+  if [[ $v =~ ^\"([^\"]*)\" ]]; then v="${BASH_REMATCH[1]}"
+  elif [[ $v =~ ^\'([^\']*)\' ]]; then v="${BASH_REMATCH[1]}"
+  else v="$(printf '%s' "$v" | sed -E 's/[[:space:]]+#.*$//; s/[[:space:]]+$//')"
+  fi
+  printf '%s\n' "$v"
 }
 
 # Resolve a variable: environment first, then each env file in order.
@@ -53,7 +57,8 @@ if [ -z "$JIRA_BASE_URL" ] || [ -z "$JIRA_API_TOKEN" ]; then
   echo "JIRA_CREDENTIALS_MISSING: found JIRA key(s) $*, but cannot fetch them (JIRA_BASE_URL / JIRA_API_TOKEN not set)."
   echo "To enable, add to ~/.claude/.env (or <project>/.claude/.env, or export as env vars):"
   echo "  JIRA_BASE_URL=https://your-company.atlassian.net"
-  echo "  JIRA_EMAIL=you@company.com   # Cloud only; omit for Server/DC personal access token"
+  echo "  # JIRA_EMAIL: Cloud only; omit this line for a Server/DC personal access token"
+  echo "  JIRA_EMAIL=you@company.com"
   echo "  JIRA_API_TOKEN=<token>       # Cloud: https://id.atlassian.com/manage-profile/security/api-tokens"
   exit 0
 fi

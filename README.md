@@ -5,6 +5,7 @@ Agent Skills developed and collected by the **Ekino Vietnam** team — reusable 
 ## Available skills
 
 - [`ekino-review-mr`](./ekino-review-mr) — review a GitLab merge request and optionally post findings back inline via `glab`.
+- [`jira-assistance`](./jira-assistance) — log work, comment, change status, and update fields on a JIRA ticket.
 
 ## Usage
 

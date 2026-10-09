@@ -28,7 +28,8 @@ Reviewing MRs well requires more than reading a diff: catching duplicate work, c
 - Optional: JIRA ticket context. When the MR title, branch, or description contains a JIRA key, `scripts/fetch-jira-issue.sh` fetches the ticket (read-only, GET only) so the diff is checked against it. Credentials are read from env vars, then `<project>/.claude/.env`, `~/.claude/.env`, then `ekino-review-mr/.env`:
   ```
   JIRA_BASE_URL=https://your-company.atlassian.net
-  JIRA_EMAIL=you@company.com   # Cloud only; omit for Server/Data Center personal access token
+  # Cloud only: add your email. Omit it for a Server/Data Center personal access token.
+  JIRA_EMAIL=you@company.com
   JIRA_API_TOKEN=<token>
   ```
   Without credentials the review still runs; it reports the keys it found and how to configure access.
