@@ -28,7 +28,7 @@ allowed-tools:
   - Grep
 metadata:
   author: duc.nguyen
-  version: "1.5.0"
+  version: "1.6.0"
 ---
 
 # Review Merge Request
@@ -38,7 +38,7 @@ Review MR `$ARGUMENTS`. The MR may belong to the current repository or, when giv
 ## Modes
 
 - **Review-only** (default): review the MR and print findings to chat. Do not post anything to GitLab, edit, commit, or push. Exception: if no project standards doc exists and the MR's local clone is the current directory's repo, create a local `docs/code-standards.md` from a codebase scan, report the change, and do not push it.
-- **Reply** (`--reply`): after the review, post it back to the MR: one flat summary note, one line-anchored discussion per finding, and one discussion thread per unresolved question (line-anchored when it concerns specific code, unanchored otherwise). When at least one finding was posted, also add a red `Fixes todo` label to the MR (reusing a similar existing label). See "Posting the review" below. There is no `--fix` mode in v1; this skill only reviews and posts. It does not fix code.
+- **Reply** (`--reply`, or the user explicitly asks to post/reply the review to GitLab, including after a review-only run in the same conversation): after the review, post it back to the MR: one flat summary note, one line-anchored discussion per finding, and one discussion thread per unresolved question (line-anchored when it concerns specific code, unanchored otherwise). When at least one finding was posted, also add a red `Fixes todo` label to the MR (reusing a similar existing label). Always add a risk label matching the review's risk level (`Low Risk`, `Medium Risk`, or `High Risk`, reusing a similar existing label). See "Posting the review" below. There is no `--fix` mode in v1; this skill only reviews and posts. It does not fix code.
 
 ## Argument parsing
 
@@ -52,7 +52,7 @@ If `MR_REF` prints empty, stop and ask the user for a valid MR IID or URL. Do no
 
 `MR_SEL` is the selector to pass to every `glab mr` command (`glab mr note <MR_SEL> ...`, `glab mr approve <MR_SEL>`). For a URL it is `<iid> -R <project URL>`, which works from any directory; for a bare IID it is the IID, resolved against the current directory's repo.
 
-Detect flag: `--reply` present → reply mode active (post to GitLab).
+Detect flag: `--reply` present → reply mode active (post to GitLab). Reply mode is also active when the user explicitly asks to post or reply the review to the MR, in the arguments or in a follow-up message after a review-only run. In that follow-up case, post the review already shown in chat (same findings, questions, risk level, and verdict) instead of reviewing again. Never infer reply mode from a request that only asks for a review.
 
 ## Context
 
@@ -182,9 +182,9 @@ Applies to everything the review writes: chat output, the summary note, finding 
 - No fancy or filler words such as "leverage", "utilize", "robust", "seamless", "comprehensive", "crucial", "delve", "ensure", "facilitate", "streamline". Say the plain thing ("use", "strong", "check", "make sure").
 - Severity labels stay as plain bold words: `**Critical:**`, `**Important:**`, `**Suggestion:**`, `**Question:**`.
 
-## Posting the review (`--reply`)
+## Posting the review (reply mode)
 
-If `$ARGUMENTS` contains `--reply`, post the review to GitLab after the analysis above. **Every finding becomes its own line-anchored discussion. Non-anchored posts are limited to the single summary note and one discussion thread per general question.** Full algorithm, JSON payload shape, and failure handling: `references/gitlab-line-position-algorithm.md`. Read it before posting. Do not guess the position math.
+When reply mode is active (`--reply`, or the user asked to post the review), post the review to GitLab after the analysis above. **Every finding becomes its own line-anchored discussion. Non-anchored posts are limited to the single summary note and one discussion thread per general question.** Full algorithm, JSON payload shape, and failure handling: `references/gitlab-line-position-algorithm.md`. Read it before posting. Do not guess the position math.
 
 ### 1. Pre-flight
 ```bash
@@ -240,13 +240,39 @@ Run this only when at least one finding discussion (any severity) posted in step
 
 On any failure (for example `403` because the token cannot create labels), record it as a posting failure and continue. Never fail the skill over the label.
 
-### 7. Verdict-dependent action
+### 7. Add the risk level label
+Always run this in reply mode, whatever the findings. The label matches the **Risk level** from the review output:
+
+| Risk level | Label name | Color |
+|---|---|---|
+| High | `High Risk` | `#B60205` (dark red) |
+| Medium | `Medium Risk` | `#FBCA04` (amber) |
+| Low | `Low Risk` | `#0E8A16` (green) |
+
+1. Look for existing risk labels, including labels inherited from parent groups:
+   ```bash
+   glab api --hostname <HOST> "projects/<PROJECT_ID>/labels?search=risk&per_page=100"
+   ```
+   Normalize names as in step 6. For each level, reuse a label whose normalized name is `<level>risk` (for example `highrisk`), or a close variant such as `Risk: High`, `risk::high`, `High-risk`, or `Risk High`. Prefer an exact match over a variant. Treat `Critical Risk` as a variant of High only when no High label exists. Do not reuse a label with a different meaning, such as `risk-accepted` or `no risk`.
+2. No match for the review's level → create it with the color from the table:
+   ```bash
+   glab api --hostname <HOST> --method POST "projects/<PROJECT_ID>/labels" -f name="High Risk" -f color="#B60205"
+   ```
+   If it returns `409` (label already exists), use the table name as is.
+3. Add the chosen label to the MR and remove the matched labels of the other two levels, so a re-review that changes the risk level leaves exactly one risk label. `remove_labels` ignores labels the MR does not have; omit it when no other risk label matched:
+   ```bash
+   glab api --hostname <HOST> --method PUT "projects/<PROJECT_ID>/merge_requests/<IID>" -f add_labels="<chosen label>" -f remove_labels="<other risk labels, comma-separated>"
+   ```
+
+On any failure, record it as a posting failure and continue. Never fail the skill over the label.
+
+### 8. Verdict-dependent action
 - **Approve**: `glab mr approve <MR_SEL>` after all findings (there should be none Critical/Important) are posted.
 - **Request changes**: do not approve. Leave the inline discussions unresolved. That is the blocking signal in GitLab. Do not call `glab mr approve`.
 - **Comment**: no approve/revoke action; inline discussions (Suggestions) and the summary note are enough.
 
-### 8. Idempotency
-v1 does not dedupe. Re-running `ekino-review-mr <MR_REF> --reply` posts a fresh summary note, finding discussions, and question threads each time. The `Fixes todo` label is not duplicated: it is added once and an existing label is reused.
+### 9. Idempotency
+v1 does not dedupe. Re-running `ekino-review-mr <MR_REF> --reply` posts a fresh summary note, finding discussions, and question threads each time. Labels are not duplicated: `Fixes todo` and the risk label are added once and existing labels are reused, and the risk label is replaced when the risk level changes.
 
 ## Final output
 
@@ -255,5 +281,5 @@ After the mode completes, report to chat:
 - Code context mode (local fetch / API fallback, and why if fallback) and whether target drift was found
 - Duplicate/prior implementation, project standards, strategic necessity results
 - JIRA keys found and whether they were fetched; if credentials were missing, the short setup instructions
-- If `--reply` ran: number of finding discussions and question threads posted, the label added (and whether it was reused, created, or skipped), any posting failures (file/finding-or-question/error), whether the summary note posted or fell back to local print
-- Unresolved questions, if any (with `--reply`: note they were posted to the MR)
+- If reply mode ran: number of finding discussions and question threads posted, the labels added (`Fixes todo` and the risk label, each reused, created, or skipped, plus any risk label removed), any posting failures (file/finding-or-question/error), whether the summary note posted or fell back to local print
+- Unresolved questions, if any (in reply mode: note they were posted to the MR)
